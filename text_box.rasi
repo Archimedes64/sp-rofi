@@ -1,0 +1,25 @@
+@theme "~/.config/rofi/config.rasi"
+
+configuration {
+    show-icons: false;
+    separator-style: "none";
+}
+entry {
+    placeholder: "";
+}
+window {
+    width: 25%;
+    location: center;
+    height: 2.8%;
+}
+
+
+inputbar {
+    padding: 0px;
+    border:  0px; 
+    border-color:     transparent; 
+}
+
+listview {
+    lines: 0; 
+}

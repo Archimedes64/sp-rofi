@@ -1,0 +1,11 @@
+[project]
+dependencies = ["spotipy"]
+name = "sp-rofi"
+keywords = ["spotify", "rofi", "music"]
+description = "Control spotify with rofi!!"
+readme = "README.md"
+dynamic = ["version"]
+[project.scripts]
+sp-rofi = "sp_rofi.spotify_rofi:main"
+[project.urls]
+Repository = "https://github.com/Archimedes64/sp-rofi.git"
