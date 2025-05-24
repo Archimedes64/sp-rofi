@@ -9,8 +9,9 @@ from .config import (
     SPOTIFY_REDIRECT_URI,
     SPOTIFY_CLIENT_SECRET,
     ALBUMS_PATH,
-    REMOVE_NOTIFICATIONS,
 )
+
+"""functions used by multiple files. should be split up into multiple files, but this project is small enough so its fine"""
 
 
 def prompt_rofi_text(prompt_text: str) -> str:
@@ -56,6 +57,19 @@ class RofiInvalidChoiceError(RofiException):
         super().__init__(f"Invalid choice '{selected_item}' is not in menu {menu_name}")
 
 
+class GoBackSignal:
+    """
+    returned when the user presses go back in a action.
+    feels easier to read if it looks like this instead of None or 0
+    """
+
+
+def play_album_from_uri(sp, uri):
+    sp.shuffle(False)
+    sp.start_playback(context_uri=uri)
+    return "Started album playback"
+
+
 def load_albums():
     try:
         with open(ALBUMS_PATH, "r") as f:
@@ -81,7 +95,4 @@ sp = spotipy.Spotify(
 
 
 def send_notification(content):
-    if REMOVE_NOTIFICATIONS:
-        print("Not sending a notification i guess.")
-        return
     subprocess.run(["notify-send", "Spotify Rofi", content])

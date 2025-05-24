@@ -1,4 +1,6 @@
-"""Please make sure your following the guide in the readme"""
+"""Please make sure your following the guide in the readme. (this is in ~/.config/sp-rofi/ right? right?)
+All paths you put in must not be relative to this file. must be the absolute path
+"""
 
 SPOTIFY_CLIENT_ID = ""  # Set to your client id
 SPOTIFY_CLIENT_SECRET = ""  # Set to your client secret

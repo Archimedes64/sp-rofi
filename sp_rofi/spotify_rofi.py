@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
+import time
 import sys
 from typing import Callable, Union, Optional
 
-from . import spotify_control as sc  #
+from . import spotify_control as sc
 from .album_manager import delete_album, add_an_album as add_album, play_album
-from .config import ICONS, GO_BACK_MESSAGE
+from .config import ICONS, GO_BACK_MESSAGE, REMOVE_NOTIFICATIONS
 from .utils import (
+    GoBackSignal,
     prompt_rofi_menu,
     prompt_rofi_text,
     RofiTextCancelledError,
@@ -38,9 +40,8 @@ class Action:
             user_response = prompt_rofi_text(self.prompt)
             if not user_response:
                 raise RofiTextCancelledError
-            send_notification(sc.spotify_control(self.action, user_response))
-            return
-        send_notification(sc.spotify_control(self.action, self.arg))
+            return sc.spotify_control(self.action, user_response)
+        return sc.spotify_control(self.action, self.arg)
 
 
 class CustomAction:
@@ -55,7 +56,7 @@ class CustomAction:
         self.custom_handling = custom_handling
 
     def execute(self):
-        send_notification(self.custom_handling())
+        return self.custom_handling()
 
 
 class Menu:
@@ -111,10 +112,10 @@ def switch_devices():
         devices_dict[device_icon + device["name"]] = device
     devices_dict[GO_BACK_MESSAGE] = "place holder"
     selected_device_name = prompt_rofi_menu("Device", list(devices_dict.keys()))
-    if not selected_device_name or selected_device_name == GO_BACK_MESSAGE:
-        raise RofiTextCancelledError()  # this is a bit scummy. D-; buuuuut it works soo
+    if selected_device_name == GO_BACK_MESSAGE:
+        return GoBackSignal()
     if selected_device_name not in devices_dict:
-        raise RofiInvalidChoiceError("Switch Devices", selected_device)
+        raise RofiInvalidChoiceError("Switch Devices", selected_device_name)
     if not selected_device_name:
         raise RofiTextCancelledError
     selected_device = devices_dict[selected_device_name]
@@ -123,25 +124,65 @@ def switch_devices():
 
 
 def set_volume():
-    preset_volumes = [f"{i}%" for i in range(100, -1, -25)]
-    del preset_volumes[4]  # theres a better way to do this. but like who cares?
-    preset_volumes.append("Custom")
+    preset_volumes = [
+        f"{ICONS['set_vol']} Custom",
+        f"{ICONS['vol_up']} 75%",
+        f"{ICONS['vol_down']} 50%",
+        f"{ICONS['vol_mute']} 25%",
+    ]
 
     preset_volumes = preset_volumes + [GO_BACK_MESSAGE]
     vol_selection = prompt_rofi_menu("Set Volume", preset_volumes)
     if not vol_selection:
         raise RofiCancelledError
-    if vol_selection == GO_BACK_MESSAGE:
-        raise RofiTextCancelledError  # scummy. i know. no one will see this though right?
-    if vol_selection == "Custom":
-        custom_vol = prompt_rofi_text("Volume (%)")
+    elif vol_selection == GO_BACK_MESSAGE:
+        return GoBackSignal()
+    elif vol_selection == preset_volumes[0]:
+        custom_vol = prompt_rofi_text("Volume (%)").strip(
+            "%"
+        )  # no one would actualy put the % but just in case
         if not custom_vol:
             raise RofiTextCancelledError
+        if not custom_vol.isdigit():
+            return "Please set volume to a valid number"
         return run_control("set", custom_vol)
     else:
         if vol_selection not in preset_volumes:
             raise RofiInvalidChoiceError("Set Volume", vol_selection)
-        return run_control("set", vol_selection.strip("%"))
+        return run_control("set", vol_selection[-3:].strip("%"))
+
+
+def play_from_queue():
+    queue = sc.sp.queue()
+    if not queue:
+        return "Queue is empty"
+    queue = queue["queue"][:7]
+    formated_queue = {
+        f"{song['name']} <small> - {song['artists'][0]['name']} </small>".replace(
+            "&", "&amp;"
+        ): index
+        for index, song in enumerate(queue)
+    }
+    formated_queue[GO_BACK_MESSAGE] = (
+        0  # place holder but incase GO_BACK_MESSAGE somehow goes forward it wont skip any songs
+    )
+    print(formated_queue)
+    selected_song = prompt_rofi_menu("Queue", list(formated_queue.keys()))
+    if not selected_song:
+        raise RofiCancelledError
+    if selected_song not in formated_queue:
+        raise RofiInvalidChoiceError("Queue", selected_song)
+    if selected_song == GO_BACK_MESSAGE:
+        return GoBackSignal()
+
+    for _ in range(formated_queue[selected_song] + 1):
+        try:
+            sc.sp.next_track()
+        except Exception:
+            return "Spotify Failed Try again in a bit."
+        time.sleep(0.4)
+
+    return "Now Playing Your Song :)"
 
 
 play_album_menu = Menu(
@@ -159,6 +200,15 @@ libary_add_menu = Menu(
     items=[
         Action(name=f"{ICONS['like']} Like Song", action="like_song"),
         CustomAction(name=f"{ICONS['set_vol']} Add Album", custom_handling=add_album),
+        Action(
+            name=f"{ICONS['list']} Add Current Song to Playlist",
+            action="add_current_to_playlist",
+        ),
+        Action(
+            name=f"{ICONS['song']} Add Song to Playlist",
+            action="add_to_playlist",
+            prompt="Song",
+        ),
     ],
 )
 libary_delete_menu = Menu(
@@ -168,15 +218,24 @@ libary_delete_menu = Menu(
             name=f"{ICONS['delete']} Delete Album", custom_handling=delete_album
         ),
         Action(name=f"{ICONS['hollow_heart']} Unlike Song", action="unlike_song"),
+        Action(
+            name=f"{ICONS['list']} Remove Current Song From Playlist",
+            action="remove_current_from_playlist",
+        ),
+        Action(
+            name=f"{ICONS['song']} Remove Song From Playlist",
+            action="remove_from_playlist",
+            prompt="Song",
+        ),
     ],
 )
 
 loop_menu = Menu(
     name=f"{ICONS['repeat']} Loop",
     items=[
-        Action(name=f"{ICONS['repeat']} Context", action="loop", arg="context"),
-        Action(name=f"{ICONS['repeat']} Track", action="loop", arg="track"),
-        Action(name=f"{ICONS['repeat']} Off", action="loop", arg="off"),
+        Action(name=f"{ICONS['repeat1']} Context", action="loop", arg="context"),
+        Action(name=f"{ICONS['repeat2']} Track", action="loop", arg="track"),
+        Action(name=f"{ICONS['repeat_off']} Off", action="loop", arg="off"),
     ],
 )
 shuffle_menu = Menu(
@@ -217,6 +276,25 @@ main_menu = Menu(
                     action="play_playlist",
                     prompt="Playlist",
                 ),
+                Menu(
+                    name=f"{ICONS['song']} Play Song",  # icon for song is a record. so thats kinda stupid
+                    items=[
+                        Action(
+                            name=f"{ICONS['play']} Play Song",
+                            action="play_song",
+                            prompt="Song",
+                        ),
+                        Action(
+                            name=f"{ICONS['album']} Add to Queue",  # no good symbol for this. so just picking generic music notesI
+                            action="add_to_queue",
+                            prompt="Song",
+                        ),
+                        CustomAction(
+                            name=f"{ICONS['list']} Play song in queue",
+                            custom_handling=play_from_queue,
+                        ),
+                    ],
+                ),
             ],
         ),
         Menu(
@@ -256,10 +334,20 @@ def main():
             selection = current_menu.select_item(previous_menu)
 
             if isinstance(selection, (Action, CustomAction)):
-                try:
-                    selection.execute()
-                except RofiTextCancelledError:
+                result = selection.execute()
+                if isinstance(
+                    result, GoBackSignal
+                ):  # much cleaner than my original idea(please dont ask what it was)
                     continue
+
+                elif isinstance(result, str):
+                    if REMOVE_NOTIFICATIONS:
+                        sys.exit(0)
+                    send_notification(result)
+                else:
+                    raise Exception(
+                        f"Result was of type {type(selection)} current menu is {current_menu}. please fix.(.execute must return a string or GoBackSignal)"
+                    )
                 sys.exit(0)
             elif isinstance(selection, Menu):
                 if previous_menu is selection:
@@ -268,7 +356,7 @@ def main():
                     menus.append(selection)
             else:
                 raise Exception(
-                    "Menu had item that is not a valid class. Either there is more classes than you thought, or You Messed up the menus"
+                    "Menu had item that is not a valid class. Either there is more classes than you thought, or you(me) messed up the menus"
                 )
 
     except RofiException:

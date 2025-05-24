@@ -1,15 +1,15 @@
 import json
-from urllib.parse import uses_relative
-from .spotify_control import play_album_from_uri
-from .config import ICONS, ALBUMS_PATH
+from .config import GO_BACK_MESSAGE, ALBUMS_PATH
 from .utils import (
     RofiCancelledError,
     RofiInvalidChoiceError,
     RofiTextCancelledError,
+    GoBackSignal,
     prompt_rofi_menu,
     prompt_rofi_text,
     load_albums,
     sp,
+    play_album_from_uri,
 )
 
 
@@ -19,28 +19,41 @@ class AlbumNotFound(Exception):
         super().__init__(self.message)
 
 
-def search_for_albums(query, limit=10):
+def search_for_albums(query, limit=10) -> list:
+    """Searches albums formats into a dict to easily tell if seen before.
+    if seen before then that means theres a clean version of the albums. usally this is the second album in the list returned
+    but just in case check if the second album is explicit if so overwrite the original.(i assume no one would want it to not work like this)
+    """
+
     results = sp.search(q=query, type="album", limit=limit, market="US")
     if results is None or not results["albums"]["items"]:
         raise AlbumNotFound(f"No album found with query {query}")
-    albums = []
+    albums = {}
     for album in results["albums"]["items"]:
         artist = album["artists"][0]["name"]
         artist_id = album["artists"][0]["id"]
-        genres = sp.artist(artist_id)["genres"]  # pyright: ignore
+        genres = sp.artist(artist_id)["genres"]
+
         release_year = album["release_date"][:4]
         name = album["name"]
+        if name in albums and albums[name]["artist"] == artist:
+            print(
+                "multiple albums found of same name and by same artist. taking the explicit one"
+            )
+            tracks = sp.album_tracks(album["id"])["items"]
+            if not any(track["explicit"] for track in tracks):
+                print("second album was clean. keeping original")
+                continue
         album_uri = album["uri"]
-        albums.append(
-            {
-                "name": name,
-                "artist": artist,
-                "release_year": release_year,
-                "genres": genres,
-                "uri": album_uri,
-            }
-        )
-    return albums
+        albums[name] = {
+            "name": name,
+            "artist": artist,
+            "release_year": release_year,
+            "genres": genres,
+            "uri": album_uri,
+        }
+
+    return list(albums.values())
 
 
 def format_albums_for_rofi(albums):
@@ -81,13 +94,13 @@ def delete_album_from_string(album_str: str):
 def delete_album():
     albums = format_albums_for_rofi(load_albums())
     album_strs = list(albums.keys())
-    album_strs += [f"{ICONS['back']} Back"]
+    album_strs += [GO_BACK_MESSAGE]
     album_selection = prompt_rofi_menu("Album", album_strs)
 
     if not album_selection:
         raise RofiCancelledError
-    if album_selection == f"{ICONS['back']} Back":
-        raise RofiTextCancelledError  # scummy. scummy. scummy.
+    if album_selection == GO_BACK_MESSAGE:
+        return GoBackSignal()
     selected_album_name = albums[album_selection]["name"]
     delete_album_from_string(selected_album_name)
     return f"Deleting Album {selected_album_name}."

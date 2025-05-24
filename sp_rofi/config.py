@@ -1,6 +1,9 @@
+# NOTE: This is not the user config please do not edit
+
 import sys
 import importlib.util
 import os
+import shutil
 
 
 spec = importlib.util.spec_from_file_location(
@@ -31,6 +34,17 @@ except AttributeError:
     print("REMOVE_NOTIFICATIONS not set. defaulting to False")
     REMOVE_NOTIFICATIONS = False
 
+if not shutil.which("notify-send"):
+    print(
+        "WARNING: notify-send is not installed. turning off notifications.(check README for install intructions)"
+    )
+    REMOVE_NOTIFICATIONS = True
+if not shutil.which("rofi"):
+    print(
+        "ERROR: really? rofi is not installed. please. install. rofi.(check README for more information)"
+    )
+    sys.exit(1)
+
 SPOTIPY_CACHE_PATH = os.path.expanduser(SPOTIPY_CACHE_PATH)
 ALBUMS_PATH = os.path.expanduser(ALBUMS_PATH)
 
@@ -45,12 +59,17 @@ ICONS = {
     "shuffle_on": f"\uf205{SPACE_BETWEEN_ICONS}",
     "shuffle_off": f"\uf204{SPACE_BETWEEN_ICONS}",
     "repeat": f"\uf01e{SPACE_BETWEEN_ICONS}",
+    "repeat2": f"󰑘{SPACE_BETWEEN_ICONS}",
+    "repeat1": f"󰑖{SPACE_BETWEEN_ICONS}",
+    "repeat_off": f"󰑗{SPACE_BETWEEN_ICONS}",
     "vol_up": f"\uf028{SPACE_BETWEEN_ICONS}",
     "vol_down": f"\uf027{SPACE_BETWEEN_ICONS}",
+    "vol_mid": f"󰖀{SPACE_BETWEEN_ICONS}",
     "vol_mute": f"\uf026{SPACE_BETWEEN_ICONS}",
     "set_vol": f"\uf1de{SPACE_BETWEEN_ICONS}",
     "artist": f"\uf007{SPACE_BETWEEN_ICONS}",
     "album": f"\uf001{SPACE_BETWEEN_ICONS}",
+    "song": f"{SPACE_BETWEEN_ICONS}",
     "like": f"\uf004{SPACE_BETWEEN_ICONS}",
     "random": f"\uf074{SPACE_BETWEEN_ICONS}",
     "back": f"\uf053{SPACE_BETWEEN_ICONS}",
